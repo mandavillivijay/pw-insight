@@ -30,7 +30,7 @@ def main() -> None:
 
     report_path = Path(args.report)
     if not report_path.exists():
-        print(f"Error: report file not found: {report_path}", file=sys.stderr)
+        print(f"Error: report not found: {report_path}", file=sys.stderr)
         sys.exit(1)
 
     repo_path = str(Path(args.repo).resolve())
@@ -38,10 +38,21 @@ def main() -> None:
     print(f"pw-insight v{_VERSION}")
     print(_SEP)
 
-    # Step 1 — parse
-    print(f"→ Parsing {report_path.name}...", end=" ", flush=True)
-    from pw_insight.parser import parse_results
-    failures, passed, total = parse_results(str(report_path))
+    # Step 1 — parse (auto-detect JSON vs HTML report)
+    is_html = report_path.is_dir() or report_path.suffix in (".html", ".htm")
+    label = report_path.name if report_path.is_file() else str(report_path)
+    print(f"→ Parsing {label}...", end=" ", flush=True)
+
+    if is_html:
+        from pw_insight.html_report_parser import parse_html_report
+        try:
+            failures, passed, total = parse_html_report(str(report_path))
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"\nError: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        from pw_insight.parser import parse_results
+        failures, passed, total = parse_results(str(report_path))
     print(f"{total:,} tests found")
     print(f"→ Extracting failures... {len(failures)} failed")
 
