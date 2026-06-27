@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: pip install .
+
+      - name: Smoke test — JSON report
+        run: |
+          cat > /tmp/results.json << 'EOF'
+          {
+            "suites": [{
+              "title": "Login", "file": "tests/login.spec.ts", "suites": [],
+              "specs": [{
+                "title": "should redirect after login",
+                "tests": [{"status": "failed", "results": [{"status": "failed",
+                  "error": {"message": "Timeout 30000ms exceeded", "stack": "TimeoutError at login.spec.ts:10"}}]}]
+              }]
+            }]
+          }
+          EOF
+          pw-insight --report /tmp/results.json --repo . --output /tmp/out.html
+          python3 -c "
+          from pathlib import Path
+          html = Path('/tmp/out.html').read_text()
+          assert 'const D =' in html
+          assert 'Timeout' in html
+          print('OK')
+          "
