@@ -15,13 +15,23 @@ Playwright test failure analyser — ownership, plain English reasons, filterabl
 ## Install
 
 ```bash
+git clone https://github.com/mandavillivijay/pw-insight.git
+cd pw-insight
 pip install .
+```
+
+Or directly from GitHub without cloning:
+
+```bash
+pip install git+https://github.com/mandavillivijay/pw-insight.git
 ```
 
 With optional progress bars:
 
 ```bash
 pip install ".[progress]"
+# or
+pip install "git+https://github.com/mandavillivijay/pw-insight.git#egg=pw-insight[progress]"
 ```
 
 Requires Python 3.9+. No external runtime dependencies.
