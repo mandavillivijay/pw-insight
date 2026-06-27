@@ -1,29 +1,27 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
 from .parser import FailedTest
 
 
-def _find_data_dir(report_path: Path) -> Path:
-    if report_path.is_dir():
-        return report_path / "data"
-    # given index.html — look next to it
-    return report_path.parent / "data"
+def _find_data_dir(p: Path) -> Path | None:
+    """Return the data/ directory for an HTML report path, or None if absent."""
+    candidates = [
+        p / "data",          # given the report directory
+        p.parent / "data",   # given index.html inside the report directory
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return None
 
 
-def parse_html_report(report_path: str) -> tuple[list[FailedTest], int, int]:
-    p = Path(report_path)
-    data_dir = _find_data_dir(p)
-
-    if not data_dir.exists():
-        raise FileNotFoundError(
-            f"No data/ directory found alongside {p}. "
-            "Make sure you point --report at the playwright-report/ folder or its index.html."
-        )
-
+def _parse_data_dir(data_dir: Path) -> tuple[list[FailedTest], int, int]:
     main_report: dict | None = None
     test_details: dict[str, dict] = {}
 
@@ -46,17 +44,16 @@ def parse_html_report(report_path: str) -> tuple[list[FailedTest], int, int]:
 
     if main_report is None:
         raise ValueError(
-            "Could not find report data inside the HTML report's data/ directory. "
-            "The format may be unsupported — try regenerating with --reporter=json instead."
+            "Found the data/ directory but could not read report data from it. "
+            "The Playwright version may use an unsupported format — "
+            "try re-running with --reporter=json and pass the results.json file instead."
         )
 
     failures: list[FailedTest] = []
     for file_info in main_report.get("files", []):
         file_name = file_info.get("fileName", "")
         for test in file_info.get("tests", []):
-            outcome = test.get("outcome", "")
-            ok = test.get("ok", True)
-            if ok and outcome not in ("unexpected", "flaky"):
+            if test.get("ok", True) and test.get("outcome") not in ("unexpected", "flaky"):
                 continue
 
             test_id = test.get("testId", "")
@@ -86,5 +83,62 @@ def parse_html_report(report_path: str) -> tuple[list[FailedTest], int, int]:
     stats = main_report.get("stats", {})
     total = stats.get("total", 0) or (len(failures) + stats.get("expected", 0))
     passed = stats.get("expected", max(0, total - len(failures)))
-
     return failures, passed, total
+
+
+def parse_html_report(report_path: str) -> tuple[list[FailedTest], int, int]:
+    p = Path(report_path)
+    data_dir = _find_data_dir(p)
+
+    if data_dir is None:
+        if p.suffix in (".html", ".htm"):
+            raise FileNotFoundError(
+                f"Only found '{p.name}' — the Playwright HTML report needs its data/ folder too.\n"
+                "\n"
+                "  Download the full playwright-report/ directory from your CI artifact,\n"
+                "  zip it, and pass that zip to --report:\n"
+                "\n"
+                "      pw-insight --report playwright-report.zip --output report.html\n"
+                "\n"
+                "  Or re-run Playwright with --reporter=json and pass results.json instead."
+            )
+        raise FileNotFoundError(
+            f"No data/ directory found in '{p}'. "
+            "Point --report at the playwright-report/ folder, its index.html, "
+            "a zip of that folder, or a results.json file."
+        )
+
+    return _parse_data_dir(data_dir)
+
+
+def parse_zip_report(zip_path: str) -> tuple[list[FailedTest], int, int]:
+    """Extract a zipped playwright-report/ artifact and parse it."""
+    tmp = tempfile.mkdtemp(prefix="pw_insight_")
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(tmp)
+
+        tmp_p = Path(tmp)
+
+        # Common CI artifact layouts after extraction:
+        #   tmp/data/*.zip                        (artifact uploaded from inside playwright-report/)
+        #   tmp/playwright-report/data/*.zip      (artifact uploaded from project root)
+        #   tmp/<any-dir>/data/*.zip              (any other nesting)
+        for candidate in [tmp_p, *sorted(tmp_p.rglob("data"))]:
+            data_dir = candidate if candidate.name == "data" else candidate / "data"
+            if data_dir.is_dir() and any(data_dir.glob("*.zip")):
+                return _parse_data_dir(data_dir)
+
+        raise FileNotFoundError(
+            "Could not find a data/ directory with Playwright report zips inside the archive.\n"
+            "\n"
+            "  Make sure the zip contains the full playwright-report/ folder, not just index.html.\n"
+            "  In GitHub Actions, upload the artifact like this:\n"
+            "\n"
+            "      - uses: actions/upload-artifact@v4\n"
+            "        with:\n"
+            "          name: playwright-report\n"
+            "          path: playwright-report/"
+        )
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

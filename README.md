@@ -44,21 +44,26 @@ Requires Python 3.9+. Zero external runtime dependencies.
 
 ## Usage
 
-### HTML report (default Playwright output)
+### From a CI artifact zip (most common)
+
+Download the `playwright-report` artifact from your CI run — it arrives as a `.zip` file. Pass it directly:
+
+```bash
+pw-insight --report playwright-report.zip --output ./pw-insight-report.html
+```
+
+> **Note:** the zip must contain the full `playwright-report/` folder structure (i.e. `data/*.zip` inside it), not just `index.html`. See [CI setup](#ci-setup) below.
+
+### From the report directory on the same machine
 
 ```bash
 pw-insight --report ./playwright-report --repo . --output ./pw-insight-report.html
 ```
 
-Point `--report` at the `playwright-report/` folder Playwright creates automatically — no extra Playwright flags needed.
-
-### JSON report
+### From a JSON report
 
 ```bash
-# Generate the JSON report
 npx playwright test --reporter=json > playwright-report/results.json
-
-# Analyse it
 pw-insight --report ./playwright-report/results.json --repo . --output ./pw-insight-report.html
 ```
 
@@ -68,10 +73,32 @@ Then open `pw-insight-report.html` in any browser.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--report` | *(required)* | Path to `playwright-report/` directory, `index.html`, or `results.json` |
+| `--report` | *(required)* | `playwright-report/` directory, `.zip` of it, `index.html`, or `results.json` |
 | `--repo` | `.` | Git repository root for ownership lookup |
 | `--output` | `./pw-insight-report.html` | Output HTML path |
 | `--limit` | *(none)* | Cap the number of failures processed |
+
+### CI setup
+
+For the zip workflow to work your CI must upload the **full** `playwright-report/` directory — not just `index.html`.
+
+**GitHub Actions:**
+```yaml
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: playwright-report
+    path: playwright-report/
+```
+
+**GitLab CI:**
+```yaml
+artifacts:
+  paths:
+    - playwright-report/
+```
+
+Download the artifact → run `pw-insight --report playwright-report.zip` → open the HTML.
 
 ## Example output
 

@@ -22,7 +22,8 @@ def main() -> None:
         prog="pw-insight",
         description="Playwright test failure analyser — offline, no API keys.",
     )
-    ap.add_argument("--report", required=True, help="Path to Playwright results.json")
+    ap.add_argument("--report", required=True,
+                    help="playwright-report/ directory, a .zip of it, index.html, or results.json")
     ap.add_argument("--repo", default=".", help="Git repository root (default: .)")
     ap.add_argument("--output", default="./pw-insight-report.html", help="Output HTML path")
     ap.add_argument("--limit", type=int, default=None, help="Cap number of failures to process")
@@ -38,21 +39,25 @@ def main() -> None:
     print(f"pw-insight v{_VERSION}")
     print(_SEP)
 
-    # Step 1 — parse (auto-detect JSON vs HTML report)
-    is_html = report_path.is_dir() or report_path.suffix in (".html", ".htm")
+    # Step 1 — parse (auto-detect format)
+    suffix = report_path.suffix.lower()
     label = report_path.name if report_path.is_file() else str(report_path)
     print(f"→ Parsing {label}...", end=" ", flush=True)
 
-    if is_html:
-        from pw_insight.html_report_parser import parse_html_report
-        try:
+    try:
+        if suffix == ".json":
+            from pw_insight.parser import parse_results
+            failures, passed, total = parse_results(str(report_path))
+        elif suffix == ".zip":
+            from pw_insight.html_report_parser import parse_zip_report
+            failures, passed, total = parse_zip_report(str(report_path))
+        else:
+            # directory or .html/.htm
+            from pw_insight.html_report_parser import parse_html_report
             failures, passed, total = parse_html_report(str(report_path))
-        except (FileNotFoundError, ValueError) as exc:
-            print(f"\nError: {exc}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        from pw_insight.parser import parse_results
-        failures, passed, total = parse_results(str(report_path))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        sys.exit(1)
     print(f"{total:,} tests found")
     print(f"→ Extracting failures... {len(failures)} failed")
 
