@@ -12,13 +12,24 @@
 
 ## What it does
 
-Point it at your Playwright report directory after a test run and get a self-contained HTML dashboard that shows:
+Point it at your Playwright test output and get a self-contained HTML dashboard that shows:
 
 - **Who owns failing tests** — last git author per test file
 - **Why tests failed** — plain English, from pattern matching (no LLM, no AI)
 - **What kind of failures** — Timeout, Element Not Found, Assertion, Network, Auth, Server, JS Error, Visual Diff
 - **Filterable table** — search by test name, filter by owner or category, sort by any column
 - **Insights panels** — failures by owner, by category, top 10 most common reasons
+
+## Supported inputs
+
+| Input | Works? | Notes |
+|-------|--------|-------|
+| `playwright-report/` directory | ✅ | Full directory with `data/` subfolder — default output of `npx playwright test` |
+| `.zip` of `playwright-report/` | ✅ | CI artifact downloaded as a zip — must contain the full directory, not just `index.html` |
+| `results.json` | ✅ | Generated with `--reporter=json` |
+| `index.html` alone | ❌ | Just the viewer shell — test data lives in `data/` alongside it |
+
+> If your CI artifact only contains `index.html`, see [CI setup](#ci-setup) to fix the upload, or add a JSON reporter to get `results.json` instead.
 
 ## Install
 
